@@ -1,0 +1,109 @@
+#!/bin/python
+#
+# PyEcasound Control Script
+#
+# Play back A format files (already trimmed and windowed) from disk to
+# the inputs of TetraProc, and at the same time record B format data from
+# the output of TetraProc to a disk file.
+#
+# As ecasound does not recognize the input soundfiles written by octave,
+# they are converted first to 24 bit PCM using sndfile-convert
+#
+#
+# Copyright 2016, Fernando Lopez-Lezcano, All Rights Reserved
+# nando@ccrma.stanford.edu
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import time
+from ecacontrol import *
+from subprocess import *
+
+e = ECA_CONTROL_INTERFACE()
+
+e.command("cs-add tetraproc_process")
+
+status = e.command("c-add AF_play")
+status = e.command("c-add BF_record")
+print(status)
+
+## new chain for A-format playback
+
+print(e.command("c-select AF_play"))
+print("== starting jack output...")
+print(e.command("cs-set-audio-format ,4,48000"))
+print(e.command("ao-add jack_multi,tetraproc:A-form.1(LF),tetraproc:A-form.2(RF),tetraproc:A-form.3(LB),tetraproc:A-form.4(RB)"))
+
+## new chain for B-format recording
+
+print(e.command("c-select BF_record"))
+print("== starting jack input...")
+print(e.command("cs-set-audio-format ,4,48000"))
+print(e.command("ai-add jack_multi,tetraproc:B-form.W,tetraproc:B-form.X,tetraproc:B-form.Y,tetraproc:B-form.Z"))
+
+## start processing
+
+for measurement in range(1, 17):
+    m = "%0.3d" % (measurement)
+    print("==== processing measurement %d" % (measurement))
+
+    ## convert soundfile to format needed by ecasound
+    os.system("sndfile-convert -pcm24 ../data/current/af/a-format-cal-" + m + ".wav " +
+              " ../data/current/af/a-format-cal-" + m + "-pcm24.wav ")
+    
+    ## set up file playbak
+    print(e.command("c-select AF_play"))
+    print("== reading soundfile...")
+    print(e.command("ai-add ../data/current/af/a-format-cal-" + m + "-pcm24.wav"))
+
+    ## set up file recording
+    print(e.command("c-select BF_record"))
+    print("== writing soundfile...")
+    print(e.command("ao-add ../data/current/bf-tetraproc/b-format-" + m + ".wav"))
+
+    ## start jack...
+    print(e.command("engine-launch"))
+    time.sleep(0.25)
+
+    print(e.command("start"))
+    print("== waiting...")
+    time.sleep(1.0)
+    print("== woke up")
+
+    e.command("stop")
+    print("== stopped")
+
+    ## remove old chains
+    # (this prints an error but seems to work anyway)
+    print("== remove objects")
+    print(e.command("ao-select ../data/current/bf-tetraproc/b-format-" + m + ".wav"))
+    print(e.command("ao-remove"))
+
+    ## wait a little bit...
+    time.sleep(0.5)
+
+    #print(e.command("aio-status"))
+    
+## done with processing
+
+e.command("cs-disconnect")
+print("== disconnected!")
+
+## remove all temporary files
+for measurement in range(1, 17):
+    m = "%0.3d" % (measurement)
+    print("==== removing %d" % (measurement))
+    os.system("rm -f ../data/current/af/a-format-" + m + "-pcm24.wav")
+
+print("== done")

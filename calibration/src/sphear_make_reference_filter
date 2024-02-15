@@ -1,0 +1,78 @@
+# -*- mode: sh -*-
+#
+# *SpHEAR Project
+#
+# make_reference_drc_filter: create an inverse equalization filter based
+#                            on the recorded reference microphone signal
+#
+# $1 -> microphone calibration file
+# $2 -> path for reference measurement (use current default if not supplied)
+#
+# Copyright 2016-2018, Fernando Lopez-Lezcano, All Rights Reserved
+# nando@ccrma.stanford.edu
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+MIC_CAL=$1
+if [ -z "$MIC_CAL" ] ; then
+    echo "microphone calibration name not supplied!"
+    exit 1
+fi
+REF_PATH=$2
+if [ -z "$REF_PATH" ] ; then
+    REF_PATH="../data/current/"
+fi
+
+# we assume DRC is installed, see:
+# http://drc-fir.sourceforge.net/
+#
+DRC_BASE="../drc-3.2.1"
+
+# we use the trimmed reference impulse response as input
+# REFERENCE="../data/current/export/reference-001-1.wav"
+REFERENCE="$REF_PATH/cal/reference-001-1.wav"
+
+# raw pcm output file base name
+OUTFILE="drc-filter"
+
+# calibration data directory
+CAL_DIR="$REF_PATH/cal"
+
+# configuration file (based on the "minimal" stock preset)
+# CONFIG="drc/erb_orig.drc"
+# CONFIG="drc/minimal.drc"
+CONFIG="drc/normal.drc"
+
+# see if we have a microphone calibration file
+if [ -n "$1" ] ; then
+    PSPOINTSFILE="--PSPointsFile drc/mics/$1/$1-cal.txt"
+    echo "  using drc/mics/$1/$1-cal.txt microphone calibration file"
+else
+    PSPOINTSFILE="--PSPointsFile drc/flat.txt"
+    echo "  using flat microphone calibration file"
+fi
+
+# normalize reference soundfile and convert to a format that DRC likes
+REFDRC=`echo ${REFERENCE}|sed "s|.wav|-norm.raw|"`
+sox --norm=-3 ${REFERENCE} -t f32 -c 1 ${REFDRC}
+
+# run drc
+${DRC_BASE}/source/drc --BCInFile ${REFDRC} --PSOutFile ${CAL_DIR}/${OUTFILE}.pcm ${CONFIG} \
+	   --PSPointsFile drc/flat.txt $PSPOINTSFILE
+
+# convert the raw PCM output to a wav file that octave can understand
+sox -e floating-point -t f32 -b 32 -r 48000 -c 1 -t raw ${CAL_DIR}/${OUTFILE}.pcm ${CAL_DIR}/${OUTFILE}.wav
+
+echo "filter written to ${CAL_DIR}/${OUTFILE}.wav"
+echo "done!"

@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+
+for m in `seq 1 16`; do
+    n=`printf "%03d" $m`
+    echo "==== measurement $m ($n)..."
+    # start background capture
+    ecasound -t:6 \
+	     -i "jack_multi,tetraproc:B-form.W,tetraproc:B-form.X,tetraproc:B-form.Y,tetraproc:B-form.Z" \
+	     -f:f32,4,48000 -o:sndfile,"../cal/2016.04.20/export/b-format-fons-rendered-$n.wav" &
+    # play back A format signal
+    ecasound -f:s16_le,4,48000 -i:sndfile,../cal/2016.04.20/export/a-format-fons-$n.wav \
+	     -o "jack_multi,tetraproc:A-form.1(LF),tetraproc:A-form.2(RF),tetraproc:A-form.3(LB),tetraproc:A-form.4(RB)" \
+	     -eadb:0
+    # wait for it...
+    wait
+done
+

@@ -1,0 +1,73 @@
+#!/bin/bash
+#
+#
+
+LSCONV=../../drc-3.2.1/source/lsconv
+
+if [ "$1" == "" ] ; then
+    echo "usage: sphear_process_h2n_recording FILEPREFIX INVSWEEP (SR00x where x is the recording number)"
+    exit 1
+else
+    BASENAME=$1;
+fi
+if [ "$2" == "" ] ; then
+    echo "usage: sphear_process_h2n_recording FILEPREFIX INVSWEEP (SR00x where x is the recording number)"
+    exit 1
+else
+    INVSWEEP=$2;
+fi
+
+XYFILE=${BASENAME}XY.WAV
+MSFILE=${BASENAME}MS.WAV
+
+if [ ! -r ${XYFILE} ] ; then
+    echo "ERROR: could not find ${XYFILE}!"
+    exit 1
+fi
+if [ ! -r ${MSFILE} ] ; then
+    echo "ERROR: could not find ${MSFILE}!"
+    exit 1
+fi
+
+echo "-- convert input files to pcm..."
+sox ${XYFILE} -t f32 -c 1 -r 48000 a-format-4.pcm remix 1
+sox ${XYFILE} -t f32 -c 1 -r 48000 a-format-3.pcm remix 2
+
+echo "-- calculate impulse responses..."
+# process XY
+${LSCONV} a-format-4.pcm ${INVSWEEP} a-format-ir-4.pcm
+${LSCONV} a-format-3.pcm ${INVSWEEP} a-format-ir-3.pcm
+
+sox -t f32 -c 1 -r 48000 a-format-ir-4.pcm a-format-ir-4.wav
+sox -t f32 -c 1 -r 48000 a-format-ir-3.pcm a-format-ir-3.wav
+
+# process MS
+sox ${MSFILE} a-format-MSL.wav remix 1 gain 
+sox ${MSFILE} a-format-MSR.wav remix 2 gain 2.0
+
+# invert R
+sox a-format-MSR.wav a-format-MSRI.wav remix 1i0
+# M = L + R / 2
+sox --combine mix a-format-MSL.wav a-format-MSR.wav a-format-1.wav gain 0.5
+# S = (L - R) / 2
+sox --combine mix a-format-MSL.wav a-format-MSRI.wav a-format-2.wav gain 0.5
+
+# convert to pcm and run lsconv
+sox a-format-1.wav -t f32 -c 1 -r 48000 a-format-1.pcm
+sox a-format-2.wav -t f32 -c 1 -r 48000 a-format-2.pcm
+
+${LSCONV} a-format-1.pcm ${INVSWEEP} a-format-ir-1.pcm
+${LSCONV} a-format-2.pcm ${INVSWEEP} a-format-ir-2.pcm
+
+sox -t f32 -c 1 -r 48000 a-format-ir-1.pcm a-format-ir-1.wav
+sox -t f32 -c 1 -r 48000 a-format-ir-2.pcm a-format-ir-2.wav
+
+echo "-- removing temporary files..."
+rm -f a-format-ir-XY1.pcm a-format-ir-XY2.pcm 
+rm -f a-format-ir-MSL.pcm a-format-ir-MSR.pcm 
+rm -f a-format-?.pcm
+rm -f a-format-ir-?.pcm
+#rm -f a-format-MS?.wav
+#rm -f a-format-MSRI.wav
+
+echo "-- done"

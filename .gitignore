@@ -1,0 +1,7 @@
+# Ignore all stl and gcode files (rendered and sliced files derived from OpenSCAD models)
+#
+**/*.stl
+**/*.gcode
+#
+# Ignore backup files (emacs)
+**/*~

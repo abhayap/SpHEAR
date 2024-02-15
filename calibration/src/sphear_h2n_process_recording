@@ -1,0 +1,68 @@
+#!/bin/bash
+#
+# Convert a raw X/Y M/S H2n recording into a four channel A-format soundfile
+#
+# Copyright Fernando Lopez-Lezcano 2016
+# nando@ccrma.stanford.edu
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+if [ "$1" == "" ] ; then
+    echo "usage: sphear_h2n_process_recording PATH/FILEPREFIX (SR00x where x is the recording number)"
+    exit 1
+else
+    BASENAME=$1;
+fi
+
+XYFILE=${BASENAME}XY.WAV
+MSFILE=${BASENAME}MS.WAV
+
+if [ ! -r ${XYFILE} ] ; then
+    echo "ERROR: could not find ${XYFILE}!"
+    exit 1
+fi
+if [ ! -r ${MSFILE} ] ; then
+    echo "ERROR: could not find ${MSFILE}!"
+    exit 1
+fi
+
+# extract the directory path of the files
+DIRNAME=`dirname $XYFILE`
+
+# process XY
+echo "processing XY files..."
+sox ${XYFILE} ${DIRNAME}/a-format-4.wav remix 1
+sox ${XYFILE} ${DIRNAME}/a-format-3.wav remix 2
+
+# process MS and convert to individual mono files
+echo "processing MS files..."
+sox ${MSFILE} ${DIRNAME}/a-format-MSL.wav remix 1 gain 
+sox ${MSFILE} ${DIRNAME}/a-format-MSR.wav remix 2 gain 2.0
+
+# invert R
+sox ${DIRNAME}/a-format-MSR.wav ${DIRNAME}/a-format-MSRI.wav remix 1i0
+# M = L + R / 2
+sox --combine mix ${DIRNAME}/a-format-MSL.wav ${DIRNAME}/a-format-MSR.wav ${DIRNAME}/a-format-1.wav gain 0.5
+# S = (L - R) / 2
+sox --combine mix ${DIRNAME}/a-format-MSL.wav ${DIRNAME}/a-format-MSRI.wav ${DIRNAME}/a-format-2.wav gain 0.5
+
+# create a four channel A-format file
+echo "creating AF file..."
+AFFILE=`echo ${BASENAME}|sed 's|SR|AF|g'`
+sox -M ${DIRNAME}/a-format-1.wav ${DIRNAME}/a-format-2.wav ${DIRNAME}/a-format-3.wav ${DIRNAME}/a-format-4.wav ${AFFILE}.WAV
+
+echo "-- removing temporary files..."
+rm -f ${DIRNAME}/a-format-*.wav
+
+echo "-- done"
